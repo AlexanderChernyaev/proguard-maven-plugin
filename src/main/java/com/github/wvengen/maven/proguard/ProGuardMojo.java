@@ -1,13 +1,13 @@
 /**
  * Pyx4me framework
  * Copyright (C) 2006-2008 pyx4j.com.
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -19,15 +19,6 @@
  * @version $Id$
  */
 package com.github.wvengen.maven.proguard;
-
-import java.io.File;
-import java.io.IOException;
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
 
 import org.apache.maven.archiver.MavenArchiveConfiguration;
 import org.apache.maven.archiver.MavenArchiver;
@@ -45,8 +36,16 @@ import org.apache.tools.ant.taskdefs.Java;
 import org.codehaus.plexus.archiver.jar.JarArchiver;
 import org.codehaus.plexus.util.FileUtils;
 
+import java.io.File;
+import java.io.IOException;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
 /**
- *
  * <p>
  * The Obfuscate task provides a stand-alone obfuscation task
  * </p>
@@ -73,6 +72,14 @@ public class ProGuardMojo extends AbstractMojo {
 	 * @parameter default-value="${basedir}/proguard.conf"
 	 */
 	private File proguardInclude;
+
+	/**
+	 * +     * Sets an exclude for all library jars, eg: (!META-INF/versions/**)
+	 * +     *
+	 * +     * @parameter default-value=""
+	 * +
+	 */
+	private String libraryJarExclusion;
 
 	/**
 	 * Select specific ProGuard version from plugin dependencies
@@ -157,7 +164,7 @@ public class ProGuardMojo extends AbstractMojo {
 	/**
 	 * Specifies the input jar name (or wars, ears, zips) of the application to be
 	 * processed.
-	 *
+	 * <p>
 	 * You may specify a classes directory e.g. 'classes'. This way plugin will processed
 	 * the classes instead of jar. You would need to bind the execution to phase 'compile'
 	 * or 'process-classes' in this case.
@@ -433,14 +440,12 @@ public class ProGuardMojo extends AbstractMojo {
 						+ artifact.getType() + ":" + artifact.getClassifier() + " Scope:" + artifact.getScope());
 			}
 
-			@SuppressWarnings("unchecked")
-			final Set<Artifact> artifacts = mavenProject.getArtifacts();
+			@SuppressWarnings("unchecked") final Set<Artifact> artifacts = mavenProject.getArtifacts();
 			for (Artifact artifact : artifacts) {
 				log.debug("--- artifact " + artifact.getGroupId() + ":" + artifact.getArtifactId() + ":"
 						+ artifact.getType() + ":" + artifact.getClassifier() + " Scope:" + artifact.getScope());
 			}
-			@SuppressWarnings("unchecked")
-			final List<Dependency> dependencies = mavenProject.getDependencies();
+			@SuppressWarnings("unchecked") final List<Dependency> dependencies = mavenProject.getDependencies();
 			for (Dependency artifact : dependencies) {
 				log.debug("--- dependency " + artifact.getGroupId() + ":" + artifact.getArtifactId() + ":"
 						+ artifact.getType() + ":" + artifact.getClassifier() + " Scope:" + artifact.getScope());
@@ -450,8 +455,7 @@ public class ProGuardMojo extends AbstractMojo {
 		Set<String> inPath = new HashSet<String>();
 		boolean hasInclusionLibrary = false;
 		if (assembly != null && assembly.inclusions != null) {
-			@SuppressWarnings("unchecked")
-			final List<Inclusion> inclusions = assembly.inclusions;
+			@SuppressWarnings("unchecked") final List<Inclusion> inclusions = assembly.inclusions;
 			for (Inclusion inc : inclusions) {
 				if (!inc.library) {
 					File file = getClasspathElement(getDependency(inc, mavenProject), mavenProject);
@@ -475,12 +479,7 @@ public class ProGuardMojo extends AbstractMojo {
 					// This may not be CompileArtifacts, maven 2.0.6 bug
 					File file = getClasspathElement(getDependency(inc, mavenProject), mavenProject);
 					inPath.add(file.toString());
-					if(putLibraryJarsInTempDir){
-						libraryJars.add(file);
-					} else {
-						args.add("-libraryjars");
-						args.add(fileToString(file));
-					}
+					addLibraryJar(args, libraryJars, file);
 				}
 			}
 		}
@@ -530,12 +529,7 @@ public class ProGuardMojo extends AbstractMojo {
 					args.add(fileToString(file));
 				} else {
 					log.debug("--- ADD libraryjars:" + artifact.getArtifactId());
-					if (putLibraryJarsInTempDir) {
-						libraryJars.add(file);
-					} else {
-						args.add("-libraryjars");
-						args.add(fileToString(file));
-					}
+					addLibraryJar(args, libraryJars, file);
 				}
 			}
 		}
@@ -565,12 +559,7 @@ public class ProGuardMojo extends AbstractMojo {
 
 		if (libs != null) {
 			for (String lib : libs) {
-				if (putLibraryJarsInTempDir) {
-					libraryJars.add(new File(lib));
-				} else {
-					args.add("-libraryjars");
-					args.add(fileNameToString(lib));
-				}
+				addLibraryJar(args, libraryJars, new File(lib));
 			}
 		}
 
@@ -578,11 +567,11 @@ public class ProGuardMojo extends AbstractMojo {
 			log.debug("Copy libraryJars to temporary directory");
 			log.debug("Temporary directory: " + tempLibraryjarsDir);
 			if (tempLibraryjarsDir.exists()) {
-							try{
-								FileUtils.deleteDirectory(tempLibraryjarsDir);
-							} catch(IOException ignored){
-								// NO-OP
-							}
+				try {
+					FileUtils.deleteDirectory(tempLibraryjarsDir);
+				} catch (IOException ignored) {
+					// NO-OP
+				}
 			}
 			tempLibraryjarsDir.mkdir();
 			if (!tempLibraryjarsDir.exists()) {
@@ -603,7 +592,7 @@ public class ProGuardMojo extends AbstractMojo {
 		args.add(fileToString((new File(outputDirectory, mappingFileName).getAbsoluteFile())));
 
 		args.add("-printseeds");
-		args.add(fileToString((new File(outputDirectory,seedFileName).getAbsoluteFile())));
+		args.add(fileToString((new File(outputDirectory, seedFileName).getAbsoluteFile())));
 
 		if (log.isDebugEnabled()) {
 			args.add("-verbose");
@@ -643,8 +632,7 @@ public class ProGuardMojo extends AbstractMojo {
 
 			try {
 				jarArchiver.addArchivedFileSet(baseFile);
-				@SuppressWarnings("unchecked")
-				final List<Inclusion> inclusions = assembly.inclusions;
+				@SuppressWarnings("unchecked") final List<Inclusion> inclusions = assembly.inclusions;
 				for (Inclusion inc : inclusions) {
 					if (inc.library) {
 						File file;
@@ -692,16 +680,16 @@ public class ProGuardMojo extends AbstractMojo {
 	}
 
 	private void attachTextFile(File theFile, String mainClassifier, String suffix) {
-		final String classifier = (null == mainClassifier ? "" : mainClassifier+"-") + suffix;
-		log.info("Attempting to attach "+suffix+" artifact");
+		final String classifier = (null == mainClassifier ? "" : mainClassifier + "-") + suffix;
+		log.info("Attempting to attach " + suffix + " artifact");
 		if (theFile.exists()) {
 			if (theFile.isFile()) {
 				projectHelper.attachArtifact(mavenProject, "txt", classifier, theFile);
 			} else {
-				log.warn("Cannot attach file because it is not a file: "+theFile);
+				log.warn("Cannot attach file because it is not a file: " + theFile);
 			}
 		} else {
-			log.warn("Cannot attach file because it does not exist: "+theFile);
+			log.warn("Cannot attach file because it does not exist: " + theFile);
 
 		}
 	}
@@ -728,8 +716,8 @@ public class ProGuardMojo extends AbstractMojo {
 		for (Artifact artifact : mojo.pluginArtifacts) {
 			mojo.getLog().debug("pluginArtifact: " + artifact.getFile());
 			final String artifactId = artifact.getArtifactId();
-			if (artifactId.startsWith((useDexGuard?"dexguard":"proguard")) &&
-				!artifactId.startsWith("proguard-maven-plugin")) {
+			if (artifactId.startsWith((useDexGuard ? "dexguard" : "proguard")) &&
+					!artifactId.startsWith("proguard-maven-plugin")) {
 				int distance = artifact.getDependencyTrail().size();
 				mojo.getLog().debug("proguard DependencyTrail: " + distance);
 				if ((mojo.proguardVersion != null) && (mojo.proguardVersion.equals(artifact.getVersion()))) {
@@ -748,7 +736,7 @@ public class ProGuardMojo extends AbstractMojo {
 			mojo.getLog().debug("proguardArtifact: " + proguardArtifact.getFile());
 			return proguardArtifact.getFile().getAbsoluteFile();
 		}
-		mojo.getLog().info((useDexGuard?"dexguard":"proguard") + " jar not found in pluginArtifacts");
+		mojo.getLog().info((useDexGuard ? "dexguard" : "proguard") + " jar not found in pluginArtifacts");
 
 		ClassLoader cl;
 		cl = mojo.getClass().getClassLoader();
@@ -885,4 +873,17 @@ public class ProGuardMojo extends AbstractMojo {
 			return file;
 		}
 	}
+
+	private void addLibraryJar(ArrayList<String> args, ArrayList<File> libraryJars, File file) {
+		if (putLibraryJarsInTempDir) {
+			libraryJars.add(file);
+		} else {
+			args.add("-libraryjars");
+			args.add(fileToString(file));
+			if (libraryJarExclusion != null) {
+				args.add(libraryJarExclusion);
+			}
+		}
+	}
+
 }
